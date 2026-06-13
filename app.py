@@ -1,12 +1,14 @@
 import os
+from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, request
+from flask import abort, Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 
 SOLR_URL = os.getenv("SOLR_URL", "http://localhost:8983/solr")
 SOLR_COLLECTION = os.getenv("SOLR_COLLECTION", "dokumen")
+PDF_DIR = Path(os.getenv("PDF_DIR", "data/pdfs")).resolve()
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
 
@@ -169,6 +171,19 @@ def search():
         return jsonify({"error": "Query ke Solr gagal", "message": detail}), 502
     except requests.RequestException as exc:
         return jsonify({"error": "Request ke Solr gagal", "message": str(exc)}), 502
+
+
+@app.get("/api/pdf/<path:filename>")
+def open_pdf(filename):
+    requested_file = Path(filename)
+    if requested_file.name != filename or requested_file.suffix.lower() != ".pdf":
+        abort(404)
+
+    pdf_path = PDF_DIR / filename
+    if not pdf_path.exists():
+        abort(404)
+
+    return send_from_directory(PDF_DIR, filename, mimetype="application/pdf")
 
 
 if __name__ == "__main__":

@@ -212,6 +212,12 @@ Cek status backend dan koneksi Solr:
 GET /api/health
 ```
 
+Buka file PDF lokal dari hasil pencarian:
+
+```http
+GET /api/pdf/1.pdf
+```
+
 Contoh:
 
 ```text
@@ -301,10 +307,55 @@ python app.py
 
 ### Tahap Berikutnya: Frontend React
 
-Frontend React nanti cukup memanggil endpoint:
+Frontend React sederhana dibuat di folder:
+
+```text
+frontend/
+```
+
+Install dependency frontend:
+
+```bash
+cd frontend
+npm.cmd install
+```
+
+Jalankan frontend:
+
+```bash
+npm.cmd run dev
+```
+
+Frontend akan berjalan di:
+
+```text
+http://127.0.0.1:5173
+```
+
+Frontend memanggil endpoint:
 
 ```text
 GET http://127.0.0.1:5000/api/search?q=kata_kunci
 ```
 
 Lalu menampilkan field `judul`, `snippet`, `sumber`, `tipe`, dan `score` dari `results`.
+Judul hasil pencarian bisa diklik: dokumen web akan membuka URL asli, sedangkan dokumen PDF akan membuka file lewat endpoint Flask `/api/pdf/<nama_file>`.
+
+Jika alamat backend berubah, buat file `.env` di folder `frontend`:
+
+```text
+VITE_API_URL=http://127.0.0.1:5000
+```
+
+Urutan menjalankan aplikasi:
+
+```bash
+python app.py
+```
+
+Lalu di terminal lain:
+
+```bash
+cd frontend
+npm.cmd run dev
+```
