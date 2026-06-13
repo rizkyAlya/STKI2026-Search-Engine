@@ -11,6 +11,38 @@ SOLR_COLLECTION = os.getenv("SOLR_COLLECTION", "dokumen")
 PDF_DIR = Path(os.getenv("PDF_DIR", "data/pdfs")).resolve()
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
+DEFAULT_SUGGEST_LIMIT = 8
+MAX_SUGGEST_LIMIT = 20
+SUGGEST_STOPWORDS = {
+    "atau",
+    "akan",
+    "agar",
+    "bagi",
+    "dalam",
+    "dan",
+    "dari",
+    "dengan",
+    "ini",
+    "itu",
+    "jadi",
+    "juga",
+    "karena",
+    "lebih",
+    "pada",
+    "saat",
+    "saja",
+    "salah",
+    "sama",
+    "sampai",
+    "sangat",
+    "satu",
+    "sebagai",
+    "secara",
+    "serta",
+    "tidak",
+    "untuk",
+    "yang",
+}
 
 
 app = Flask(__name__)
@@ -19,6 +51,10 @@ CORS(app)
 
 def solr_select_url():
     return f"{SOLR_URL.rstrip('/')}/{SOLR_COLLECTION}/select"
+
+
+def solr_terms_url():
+    return f"{SOLR_URL.rstrip('/')}/{SOLR_COLLECTION}/terms"
 
 
 def parse_positive_int(value, default, maximum=None):
@@ -120,6 +156,38 @@ def search_solr(query, page, limit, tipe=None):
     }
 
 
+def parse_solr_terms(term_values):
+    suggestions = []
+    for index in range(0, len(term_values), 2):
+        term = term_values[index]
+        count = term_values[index + 1] if index + 1 < len(term_values) else 0
+        if (
+            isinstance(term, str)
+            and term.isalpha()
+            and len(term) > 2
+            and term not in SUGGEST_STOPWORDS
+        ):
+            suggestions.append({"term": term, "count": count})
+    return suggestions
+
+
+def suggest_terms(prefix, limit):
+    params = {
+        "terms": "true",
+        "terms.fl": "_text_",
+        "terms.prefix": prefix.lower(),
+        "terms.limit": limit * 4,
+        "terms.sort": "count",
+        "wt": "json",
+    }
+
+    response = requests.get(solr_terms_url(), params=params, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    term_values = data.get("terms", {}).get("_text_", [])
+    return parse_solr_terms(term_values)[:limit]
+
+
 @app.get("/api/health")
 def health():
     try:
@@ -171,6 +239,34 @@ def search():
         return jsonify({"error": "Query ke Solr gagal", "message": detail}), 502
     except requests.RequestException as exc:
         return jsonify({"error": "Request ke Solr gagal", "message": str(exc)}), 502
+
+
+@app.get("/api/suggest")
+def suggest():
+    prefix = (request.args.get("q") or request.args.get("prefix") or "").strip()
+    limit = parse_positive_int(
+        request.args.get("limit"),
+        DEFAULT_SUGGEST_LIMIT,
+        MAX_SUGGEST_LIMIT,
+    )
+
+    if len(prefix) < 2:
+        return jsonify({"query": prefix, "suggestions": []})
+
+    try:
+        return jsonify({"query": prefix, "suggestions": suggest_terms(prefix, limit)})
+    except requests.exceptions.ConnectionError:
+        return jsonify(
+            {
+                "error": "Tidak bisa terhubung ke Solr",
+                "message": "Pastikan Solr berjalan dan collection sudah dibuat.",
+            }
+        ), 503
+    except requests.exceptions.HTTPError as exc:
+        detail = exc.response.text[:1000] if exc.response is not None else str(exc)
+        return jsonify({"error": "Suggestion dari Solr gagal", "message": detail}), 502
+    except requests.RequestException as exc:
+        return jsonify({"error": "Request suggestion gagal", "message": str(exc)}), 502
 
 
 @app.get("/api/pdf/<path:filename>")

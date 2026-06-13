@@ -218,6 +218,12 @@ Buka file PDF lokal dari hasil pencarian:
 GET /api/pdf/1.pdf
 ```
 
+Endpoint opsional untuk mengambil saran kata dari Solr:
+
+```http
+GET /api/suggest?q=sa&limit=8
+```
+
 Contoh:
 
 ```text
@@ -340,6 +346,8 @@ GET http://127.0.0.1:5000/api/search?q=kata_kunci
 
 Lalu menampilkan field `judul`, `snippet`, `sumber`, `tipe`, dan `score` dari `results`.
 Judul hasil pencarian bisa diklik: dokumen web akan membuka URL asli, sedangkan dokumen PDF akan membuka file lewat endpoint Flask `/api/pdf/<nama_file>`.
+Saat pertama dibuka, frontend belum menjalankan pencarian otomatis. Hasil baru muncul setelah user mengetik kata kunci atau memilih saran.
+Autocomplete di search bar memakai daftar kata lokal di React, bukan request ke Solr, supaya saran muncul cepat saat user mengetik.
 
 Jika alamat backend berubah, buat file `.env` di folder `frontend`:
 

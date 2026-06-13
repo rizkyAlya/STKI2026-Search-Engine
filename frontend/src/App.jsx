@@ -2,6 +2,39 @@ import { useEffect, useMemo, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const PAGE_SIZE = 10;
+const SEARCH_SUGGESTIONS = [
+  "saham",
+  "saham indonesia",
+  "harga saham",
+  "pasar saham",
+  "pasar modal",
+  "ihsg",
+  "indeks harga saham gabungan",
+  "investasi",
+  "investor",
+  "investor asing",
+  "inflasi",
+  "suku bunga",
+  "nilai tukar",
+  "rupiah",
+  "makroekonomi",
+  "ekonomi global",
+  "sentimen pasar",
+  "fundamental saham",
+  "analisis fundamental",
+  "analisis teknikal",
+  "risiko investasi",
+  "dividen",
+  "emiten",
+  "bursa efek indonesia",
+  "trading halt",
+  "buyback saham",
+  "teknologi",
+  "covid",
+  "geopolitik",
+  "royalti tambang",
+  "msci",
+];
 
 function safeHighlight(value) {
   return String(value || "")
@@ -37,6 +70,22 @@ function getOpenTarget(item) {
   }
 
   return "";
+}
+
+function getLocalSuggestions(value) {
+  const keyword = value.trim().toLowerCase();
+  if (keyword.length < 2) {
+    return [];
+  }
+
+  const startsWithMatches = SEARCH_SUGGESTIONS.filter((term) =>
+    term.startsWith(keyword),
+  );
+  const containsMatches = SEARCH_SUGGESTIONS.filter(
+    (term) => !term.startsWith(keyword) && term.includes(keyword),
+  );
+
+  return [...startsWithMatches, ...containsMatches].slice(0, 8);
 }
 
 function ResultItem({ item }) {
@@ -87,18 +136,26 @@ function ResultItem({ item }) {
 }
 
 function App() {
-  const [query, setQuery] = useState("saham");
+  const [query, setQuery] = useState("");
   const [tipe, setTipe] = useState("");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [error, setError] = useState("");
 
   const totalPages = useMemo(() => {
     if (!data?.total) return 1;
     return Math.max(1, Math.ceil(data.total / PAGE_SIZE));
   }, [data]);
+  const suggestions = useMemo(() => {
+    if (!suggestionsOpen) {
+      return [];
+    }
+
+    return getLocalSuggestions(query);
+  }, [query, suggestionsOpen]);
 
   async function fetchHealth() {
     try {
@@ -115,11 +172,20 @@ function App() {
   }
 
   async function search(nextPage = page) {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      setData(null);
+      setPage(1);
+      setError("");
+      return;
+    }
+
     setLoading(true);
     setError("");
+    setSuggestionsOpen(false);
 
     const params = new URLSearchParams({
-      q: query,
+      q: trimmedQuery,
       page: String(nextPage),
       limit: String(PAGE_SIZE),
     });
@@ -151,6 +217,40 @@ function App() {
     search(1);
   }
 
+  async function searchSuggestion(term) {
+    setQuery(term);
+    setSuggestionsOpen(false);
+    setLoading(true);
+    setError("");
+
+    const params = new URLSearchParams({
+      q: term,
+      page: "1",
+      limit: String(PAGE_SIZE),
+    });
+
+    if (tipe) {
+      params.set("tipe", tipe);
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/search?${params}`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message || payload.error || "Pencarian gagal");
+      }
+
+      setData(payload);
+      setPage(1);
+    } catch (err) {
+      setData(null);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function changeType(nextType) {
     setTipe(nextType);
     setPage(1);
@@ -158,11 +258,12 @@ function App() {
 
   useEffect(() => {
     fetchHealth();
-    search(1);
   }, []);
 
   useEffect(() => {
-    search(1);
+    if (data && query.trim()) {
+      search(1);
+    }
   }, [tipe]);
 
   return (
@@ -180,13 +281,36 @@ function App() {
         </div>
 
         <form className="search-form" onSubmit={handleSubmit}>
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari dokumen..."
-            aria-label="Kata kunci pencarian"
-          />
+          <div className="search-input-wrap">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setSuggestionsOpen(true);
+              }}
+              onFocus={() => setSuggestionsOpen(true)}
+              placeholder="Cari dokumen..."
+              aria-label="Kata kunci pencarian"
+              autoComplete="off"
+            />
+
+            {suggestions.length > 0 && (
+              <div className="suggestions" role="listbox">
+                {suggestions.map((suggestion) => (
+                  <button
+                    type="button"
+                    key={suggestion}
+                    className="suggestion-item"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => searchSuggestion(suggestion)}
+                  >
+                    <span>{suggestion}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button type="submit" disabled={loading}>
             {loading ? "Mencari" : "Cari"}
           </button>
@@ -220,7 +344,7 @@ function App() {
       <section className="results-panel">
         <div className="result-summary">
           <span>
-            {data ? `${data.total} hasil` : "Belum ada hasil"}
+            {data ? `${data.total} hasil` : "Mulai ketik kata kunci untuk mencari"}
             {data?.query ? ` untuk "${data.query}"` : ""}
           </span>
           {data && <span>Halaman {page} dari {totalPages}</span>}
