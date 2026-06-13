@@ -1,0 +1,186 @@
+:root {
+  color: #14213d;
+  background: #f7faff;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+a {
+  color: inherit;
+}
+
+.page-shell {
+  min-height: 100vh;
+  overflow-x: clip;
+  background: #f7faff;
+}
+
+.site-header {
+  position: sticky;
+  z-index: 50;
+  top: 0;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px clamp(18px, 4vw, 54px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  background: #114a8d;
+  box-shadow: 0 12px 28px rgba(17, 74, 141, 0.22);
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: #ffffff;
+  font-size: 1.35rem;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.brand > span > span {
+  color: #f2c14e;
+}
+
+.brand-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.brand-button:hover,
+.brand-button:focus {
+  color: #f2c14e;
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(4, 25, 55, 0.22);
+}
+
+.brand-mark span {
+  width: 6px;
+  border-radius: 6px 6px 0 0;
+  background: #114a8d;
+}
+
+.brand-mark span:nth-child(1) {
+  height: 14px;
+  background: #d19a16;
+}
+
+.brand-mark span:nth-child(2) {
+  height: 23px;
+}
+
+.brand-mark span:nth-child(3) {
+  height: 31px;
+}
+
+.health {
+  min-width: 132px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c74d4d;
+}
+
+.health-ok .health-dot {
+  background: #d19a16;
+}
+
+.health-error {
+  border-color: rgba(255, 210, 210, 0.5);
+  color: #ffe3e3;
+}
+
+main {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.site-footer {
+  width: min(1180px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  margin: 10px auto 0;
+  padding: 18px 0 28px;
+  border-top: 1px solid rgba(17, 74, 141, 0.14);
+  color: #5c6b80;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.site-footer span {
+  max-width: 760px;
+}
+
+.site-footer small {
+  color: #66758b;
+  font-size: 0.86rem;
+  font-weight: 800;
+}

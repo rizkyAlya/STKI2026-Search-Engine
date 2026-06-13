@@ -1,0 +1,148 @@
+@media (max-width: 900px) {
+  .landing-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .search-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .year-facet-panel {
+    position: static;
+    order: -1;
+  }
+
+  .info-sidebar,
+  .info-sidebar.closed {
+    position: static;
+    width: 100%;
+  }
+
+  .info-sidebar.closed .sidebar-toggle {
+    width: fit-content;
+  }
+
+  .compact-search-section {
+    top: 68px;
+  }
+
+  .hero-section {
+    min-height: auto;
+    padding-top: 48px;
+  }
+
+  .market-visual {
+    opacity: 0.42;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-header {
+    min-height: 68px;
+    padding: 12px 14px;
+  }
+
+  .brand {
+    font-size: 1.08rem;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  .health {
+    min-width: auto;
+    font-size: 0.78rem;
+  }
+
+  .header-actions {
+    gap: 7px;
+  }
+
+  main {
+    width: min(100% - 22px, 1180px);
+  }
+
+  .hero-section {
+    padding: 42px 0 24px;
+  }
+
+  h1 {
+    font-size: clamp(2.2rem, 12vw, 3.7rem);
+  }
+
+  .hero-copy {
+    margin-top: 16px;
+  }
+
+  .hero-search,
+  .search-form,
+  .compact-search {
+    grid-template-columns: 1fr;
+    border-radius: 20px;
+  }
+
+  .search-form > button {
+    width: 100%;
+  }
+
+  .filters {
+    width: 100%;
+  }
+
+  .filters button {
+    flex: 1;
+  }
+
+  .controls-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sort-control {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 8px;
+  }
+
+  .sort-control select {
+    min-width: 156px;
+  }
+
+  .left-visual,
+  .right-visual {
+    display: none;
+  }
+
+  .result-summary {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-item {
+    padding: 15px;
+    height: 284px;
+  }
+
+  .result-topline {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .source-trail span {
+    max-width: 180px;
+  }
+
+  .pagination {
+    justify-content: space-between;
+  }
+
+  .site-footer {
+    width: min(100% - 22px, 1180px);
+  }
+}
