@@ -11,6 +11,8 @@ SOLR_COLLECTION = os.getenv("SOLR_COLLECTION", "dokumen")
 PDF_DIR = Path(os.getenv("PDF_DIR", "data/pdfs")).resolve()
 DEFAULT_LIMIT = 10
 MAX_LIMIT = 50
+MAX_SORT_DOCS = 500
+VALID_SORTS = {"relevance", "title_asc", "title_desc", "type_asc"}
 DEFAULT_SUGGEST_LIMIT = 8
 MAX_SUGGEST_LIMIT = 20
 SUGGEST_STOPWORDS = {
@@ -86,6 +88,37 @@ def build_filter_queries(tipe):
     return filters
 
 
+def build_search_params(query, rows, start=0, tipe=None, highlight=True):
+    solr_query = query if query else "*:*"
+    params = {
+        "q": solr_query,
+        "defType": "edismax",
+        "qf": "judul^3 konten _text_",
+        "fl": "id,judul,sumber,tipe,nama_file,url,score,konten",
+        "rows": rows,
+        "start": start,
+        "wt": "json",
+    }
+
+    if highlight:
+        params.update(
+            {
+                "hl": "true",
+                "hl.fl": "konten _text_",
+                "hl.simple.pre": "<mark>",
+                "hl.simple.post": "</mark>",
+                "hl.snippets": 1,
+                "hl.fragsize": 180,
+            }
+        )
+
+    filters = build_filter_queries(tipe)
+    if filters:
+        params["fq"] = filters
+
+    return params
+
+
 def normalize_highlight(highlighting, document_id, fallback_text):
     document_highlight = highlighting.get(document_id, {})
     snippets = document_highlight.get("konten") or document_highlight.get("_text_")
@@ -108,29 +141,74 @@ def scalarize_document(doc):
     return normalized
 
 
-def search_solr(query, page, limit, tipe=None):
+def normalize_documents(docs, highlighting):
+    results = []
+    for doc in docs:
+        doc = scalarize_document(doc)
+        content = doc.pop("konten", "")
+        doc["snippet"] = normalize_highlight(highlighting, doc.get("id", ""), content)
+        results.append(doc)
+    return results
+
+
+def sort_documents(documents, sort_by):
+    if sort_by == "title_asc":
+        return sorted(documents, key=lambda item: (item.get("judul") or "").lower())
+    if sort_by == "title_desc":
+        return sorted(
+            documents,
+            key=lambda item: (item.get("judul") or "").lower(),
+            reverse=True,
+        )
+    if sort_by == "type_asc":
+        return sorted(
+            documents,
+            key=lambda item: ((item.get("tipe") or ""), (item.get("judul") or "").lower()),
+        )
+    return documents
+
+
+def build_type_facets(query):
+    params = build_search_params(
+        query=query,
+        rows=MAX_SORT_DOCS,
+        start=0,
+        tipe=None,
+        highlight=False,
+    )
+    params["fl"] = "id,tipe"
+
+    response = requests.get(solr_select_url(), params=params, timeout=30)
+    response.raise_for_status()
+    docs = response.json().get("response", {}).get("docs", [])
+
+    counts = {"pdf": 0, "web": 0}
+    for doc in docs:
+        tipe = scalarize_document(doc).get("tipe")
+        if tipe in counts:
+            counts[tipe] += 1
+
+    return [
+        {"value": "pdf", "label": "PDF", "count": counts["pdf"]},
+        {"value": "web", "label": "Web", "count": counts["web"]},
+    ]
+
+
+def search_solr(query, page, limit, tipe=None, sort_by="relevance"):
+    if sort_by not in VALID_SORTS:
+        sort_by = "relevance"
+
     start = (page - 1) * limit
-    solr_query = query if query else "*:*"
-
-    params = {
-        "q": solr_query,
-        "defType": "edismax",
-        "qf": "judul^3 konten _text_",
-        "fl": "id,judul,sumber,tipe,nama_file,url,score,konten",
-        "rows": limit,
-        "start": start,
-        "wt": "json",
-        "hl": "true",
-        "hl.fl": "konten _text_",
-        "hl.simple.pre": "<mark>",
-        "hl.simple.post": "</mark>",
-        "hl.snippets": 1,
-        "hl.fragsize": 180,
-    }
-
-    filters = build_filter_queries(tipe)
-    if filters:
-        params["fq"] = filters
+    needs_local_sort = sort_by != "relevance"
+    rows = MAX_SORT_DOCS if needs_local_sort else limit
+    solr_start = 0 if needs_local_sort else start
+    params = build_search_params(
+        query=query,
+        rows=rows,
+        start=solr_start,
+        tipe=tipe,
+        highlight=True,
+    )
 
     response = requests.get(solr_select_url(), params=params, timeout=30)
     response.raise_for_status()
@@ -140,17 +218,16 @@ def search_solr(query, page, limit, tipe=None):
     docs = solr_response.get("docs", [])
     highlighting = data.get("highlighting", {})
 
-    results = []
-    for doc in docs:
-        doc = scalarize_document(doc)
-        content = doc.pop("konten", "")
-        doc["snippet"] = normalize_highlight(highlighting, doc.get("id", ""), content)
-        results.append(doc)
+    results = normalize_documents(docs, highlighting)
+    if needs_local_sort:
+        results = sort_documents(results, sort_by)[start : start + limit]
 
     return {
         "query": query,
         "page": page,
         "limit": limit,
+        "sort": sort_by,
+        "facets": {"tipe": build_type_facets(query)},
         "total": solr_response.get("numFound", 0),
         "results": results,
     }
@@ -222,11 +299,12 @@ def search():
     payload = get_search_payload()
     query = (payload.get("q") or payload.get("query") or "").strip()
     tipe = (payload.get("tipe") or payload.get("type") or "").strip().lower()
+    sort_by = (payload.get("sort") or "relevance").strip().lower()
     page = parse_positive_int(payload.get("page"), 1)
     limit = parse_positive_int(payload.get("limit"), DEFAULT_LIMIT, MAX_LIMIT)
 
     try:
-        return jsonify(search_solr(query, page, limit, tipe))
+        return jsonify(search_solr(query, page, limit, tipe, sort_by))
     except requests.exceptions.ConnectionError:
         return jsonify(
             {

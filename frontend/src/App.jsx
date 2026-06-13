@@ -54,6 +54,12 @@ const TEAM_MEMBERS = [
   ["Deviani Tarigan", "2206071773"],
   ["I Putu Bima Anargya Prabawa", "2206055050"],
 ];
+const SORT_OPTIONS = [
+  ["relevance", "Paling relevan"],
+  ["title_asc", "Judul A-Z"],
+  ["title_desc", "Judul Z-A"],
+  ["type_asc", "Tipe dokumen"],
+];
 
 function safeHighlight(value) {
   return String(value || "")
@@ -108,8 +114,6 @@ function getLocalSuggestions(value) {
 }
 
 function ResultItem({ item }) {
-  const source = item.url || item.sumber || item.nama_file || "";
-  const isUrl = /^https?:\/\//i.test(source);
   const openTarget = getOpenTarget(item);
   const title = item.judul || "Tanpa judul";
 
@@ -134,23 +138,49 @@ function ResultItem({ item }) {
         )}
       </h2>
 
-      {source && (
-        <p className="source">
-          {isUrl ? (
-            <a href={openTarget || source} target="_blank" rel="noreferrer">
-              {source}
-            </a>
-          ) : (
-            source
-          )}
-        </p>
-      )}
-
       <p
         className="snippet"
         dangerouslySetInnerHTML={{ __html: safeHighlight(item.snippet) }}
       />
     </article>
+  );
+}
+
+function TypeFacets({ value, facets, onChange }) {
+  const pdfCount = facets?.find((facet) => facet.value === "pdf")?.count;
+  const webCount = facets?.find((facet) => facet.value === "web")?.count;
+  const totalCount =
+    typeof pdfCount === "number" && typeof webCount === "number"
+      ? pdfCount + webCount
+      : null;
+
+  const labelWithCount = (label, count) =>
+    typeof count === "number" ? `${label} (${count})` : label;
+
+  return (
+    <div className="filters" aria-label="Faceted search tipe dokumen">
+      <button
+        type="button"
+        className={value === "" ? "active" : ""}
+        onClick={() => onChange("")}
+      >
+        {labelWithCount("Semua", totalCount)}
+      </button>
+      <button
+        type="button"
+        className={value === "pdf" ? "active" : ""}
+        onClick={() => onChange("pdf")}
+      >
+        {labelWithCount("PDF", pdfCount)}
+      </button>
+      <button
+        type="button"
+        className={value === "web" ? "active" : ""}
+        onClick={() => onChange("web")}
+      >
+        {labelWithCount("Web", webCount)}
+      </button>
+    </div>
   );
 }
 
@@ -164,15 +194,75 @@ function BrandMark() {
   );
 }
 
+function InfoSidebar({ open, onToggle, onSearchSuggestion }) {
+  return (
+    <aside className={`info-sidebar ${open ? "open" : "closed"}`}>
+      <button
+        type="button"
+        className="sidebar-toggle"
+        onClick={onToggle}
+        aria-expanded={open}
+      >
+        {open ? "Tutup info" : "Buka info"}
+      </button>
+
+      {open && (
+        <div className="sidebar-content">
+          <article className="side-card">
+            <h2>Pencarian Populer</h2>
+            <div className="popular-list">
+              {POPULAR_SEARCHES.map(([term, label], index) => (
+                <button key={term} type="button" onClick={() => onSearchSuggestion(term)}>
+                  <span>{index + 1}</span>
+                  <strong>{term}</strong>
+                  <small>{label}</small>
+                </button>
+              ))}
+            </div>
+          </article>
+
+          <article className="side-card">
+            <h2>Kelompok 1</h2>
+            <div className="team-list">
+              {TEAM_MEMBERS.map(([name, studentId]) => (
+                <div key={studentId}>
+                  <strong>{name}</strong>
+                  <span>{studentId}</span>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="side-card">
+            <h2>Tools & Data</h2>
+            <div className="project-list">
+              {PROJECT_INFO.map(([label, value]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                </div>
+              ))}
+            </div>
+          </article>
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function App() {
   const [query, setQuery] = useState("");
   const [tipe, setTipe] = useState("");
+  const [sortBy, setSortBy] = useState("relevance");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [error, setError] = useState("");
+  const searchMode = Boolean(data || loading || error);
+  const typeFacets = data?.facets?.tipe || [];
 
   const totalPages = useMemo(() => {
     if (!data?.total) return 1;
@@ -217,6 +307,7 @@ function App() {
       q: trimmedQuery,
       page: String(nextPage),
       limit: String(PAGE_SIZE),
+      sort: sortBy,
     });
 
     if (tipe) {
@@ -256,6 +347,7 @@ function App() {
       q: term,
       page: "1",
       limit: String(PAGE_SIZE),
+      sort: sortBy,
     });
 
     if (tipe) {
@@ -293,7 +385,7 @@ function App() {
     if (data && query.trim()) {
       search(1);
     }
-  }, [tipe]);
+  }, [tipe, sortBy]);
 
   return (
     <div className="page-shell">
@@ -309,183 +401,229 @@ function App() {
       </header>
 
       <main>
-        <section className="hero-section">
-          <div className="market-visual left-visual" aria-hidden="true">
-            <span className="trend-line" />
-            <span className="bar bar-1" />
-            <span className="bar bar-2" />
-            <span className="bar bar-3" />
-            <span className="bar bar-4" />
-          </div>
-          <div className="market-visual right-visual" aria-hidden="true">
-            <span className="candle candle-1" />
-            <span className="candle candle-2" />
-            <span className="candle candle-3" />
-            <span className="candle candle-4" />
-            <span className="candle candle-5" />
-          </div>
-
-          <div className="hero-content">
-            <h1>
-              Cari Informasi Saham Indonesia dengan <span>Cepat</span>
-            </h1>
-            <p className="hero-copy">
-              Telusuri PDF, artikel web, tren IHSG, dan faktor pasar dalam satu pencarian sederhana.
-            </p>
-
-            <form className="search-form hero-search" onSubmit={handleSubmit}>
-              <div className="search-input-wrap">
-                <input
-                  type="search"
-                  value={query}
-                  onChange={(event) => {
-                    setQuery(event.target.value);
-                    setSuggestionsOpen(true);
-                  }}
-                  onFocus={() => setSuggestionsOpen(true)}
-                  placeholder="Cari saham, IHSG, inflasi, suku bunga..."
-                  aria-label="Kata kunci pencarian"
-                  autoComplete="off"
-                />
-
-                {suggestions.length > 0 && (
-                  <div className="suggestions" role="listbox">
-                    {suggestions.map((suggestion) => (
-                      <button
-                        type="button"
-                        key={suggestion}
-                        className="suggestion-item"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => searchSuggestion(suggestion)}
-                      >
-                        <span>{suggestion}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+        {!searchMode && (
+          <>
+            <section className="hero-section">
+              <div className="market-visual left-visual" aria-hidden="true">
+                <span className="trend-line" />
+                <span className="bar bar-1" />
+                <span className="bar bar-2" />
+                <span className="bar bar-3" />
+                <span className="bar bar-4" />
               </div>
-              <button type="submit" disabled={loading}>
-                {loading ? "Mencari" : "Cari"}
-              </button>
-            </form>
-
-            <div className="quick-row" aria-label="Pencarian cepat">
-              {QUICK_SEARCHES.map((term) => (
-                <button key={term} type="button" onClick={() => searchSuggestion(term)}>
-                  {term}
-                </button>
-              ))}
-            </div>
-
-            <div className="filters" aria-label="Filter tipe dokumen">
-              <button
-                type="button"
-                className={tipe === "" ? "active" : ""}
-                onClick={() => changeType("")}
-              >
-                Semua
-              </button>
-              <button
-                type="button"
-                className={tipe === "pdf" ? "active" : ""}
-                onClick={() => changeType("pdf")}
-              >
-                PDF
-              </button>
-              <button
-                type="button"
-                className={tipe === "web" ? "active" : ""}
-                onClick={() => changeType("web")}
-              >
-                Web
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {!data && !loading && !error && (
-          <section className="landing-grid" aria-label="Ringkasan pencarian">
-            <article className="info-card project-card">
-              <h2>Tools & Data</h2>
-              <div className="project-list">
-                {PROJECT_INFO.map(([label, value]) => (
-                  <div key={label}>
-                    <span>{label}</span>
-                    <strong>{value}</strong>
-                  </div>
-                ))}
+              <div className="market-visual right-visual" aria-hidden="true">
+                <span className="candle candle-1" />
+                <span className="candle candle-2" />
+                <span className="candle candle-3" />
+                <span className="candle candle-4" />
+                <span className="candle candle-5" />
               </div>
-            </article>
 
-            <article className="info-card">
-              <h2>Pencarian Populer</h2>
-              <div className="popular-list">
-                {POPULAR_SEARCHES.map(([term, label], index) => (
-                  <button key={term} type="button" onClick={() => searchSuggestion(term)}>
-                    <span>{index + 1}</span>
-                    <strong>{term}</strong>
-                    <small>{label}</small>
+              <div className="hero-content">
+                <h1>
+                  Cari Informasi Saham Indonesia dengan <span>Cepat</span>
+                </h1>
+                <p className="hero-copy">
+                  Telusuri PDF, artikel web, tren IHSG, dan faktor pasar dalam satu pencarian sederhana.
+                </p>
+
+                <form className="search-form hero-search" onSubmit={handleSubmit}>
+                  <div className="search-input-wrap">
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setSuggestionsOpen(true);
+                      }}
+                      onFocus={() => setSuggestionsOpen(true)}
+                      placeholder="Cari saham, IHSG, inflasi, suku bunga..."
+                      aria-label="Kata kunci pencarian"
+                      autoComplete="off"
+                    />
+
+                    {suggestions.length > 0 && (
+                      <div className="suggestions" role="listbox">
+                        {suggestions.map((suggestion) => (
+                          <button
+                            type="button"
+                            key={suggestion}
+                            className="suggestion-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => searchSuggestion(suggestion)}
+                          >
+                            <span>{suggestion}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button type="submit" disabled={loading}>
+                    {loading ? "Mencari" : "Cari"}
                   </button>
-                ))}
-              </div>
-            </article>
+                </form>
 
-            <article className="info-card team-card">
-              <h2>Kelompok 1</h2>
-              <div className="team-list">
-                {TEAM_MEMBERS.map(([name, studentId]) => (
-                  <div key={studentId}>
-                    <strong>{name}</strong>
-                    <span>{studentId}</span>
-                  </div>
-                ))}
+                <div className="quick-row" aria-label="Pencarian cepat">
+                  {QUICK_SEARCHES.map((term) => (
+                    <button key={term} type="button" onClick={() => searchSuggestion(term)}>
+                      {term}
+                    </button>
+                  ))}
+                </div>
+
+                <TypeFacets value={tipe} facets={typeFacets} onChange={changeType} />
               </div>
-            </article>
-          </section>
+            </section>
+
+            <section className="landing-grid" aria-label="Ringkasan pencarian">
+              <article className="info-card project-card">
+                <h2>Tools & Data</h2>
+                <div className="project-list">
+                  {PROJECT_INFO.map(([label, value]) => (
+                    <div key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </article>
+
+              <article className="info-card">
+                <h2>Pencarian Populer</h2>
+                <div className="popular-list">
+                  {POPULAR_SEARCHES.map(([term, label], index) => (
+                    <button key={term} type="button" onClick={() => searchSuggestion(term)}>
+                      <span>{index + 1}</span>
+                      <strong>{term}</strong>
+                      <small>{label}</small>
+                    </button>
+                  ))}
+                </div>
+              </article>
+
+              <article className="info-card team-card">
+                <h2>Kelompok 1</h2>
+                <div className="team-list">
+                  {TEAM_MEMBERS.map(([name, studentId]) => (
+                    <div key={studentId}>
+                      <strong>{name}</strong>
+                      <span>{studentId}</span>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+          </>
         )}
 
-        {(data || loading || error) && (
-          <section className="results-panel">
-            <div className="result-summary">
-              <span>
-                {data ? `${data.total} hasil` : "Mencari hasil"}
-                {data?.query ? ` untuk "${data.query}"` : ""}
-              </span>
-              {data && <span>Halaman {page} dari {totalPages}</span>}
+        {searchMode && (
+          <section className="search-workspace">
+            <InfoSidebar
+              open={sidebarOpen}
+              onToggle={() => setSidebarOpen((current) => !current)}
+              onSearchSuggestion={searchSuggestion}
+            />
+
+            <div className="search-results-area">
+              <section className="compact-search-section">
+                <form className="search-form compact-search" onSubmit={handleSubmit}>
+                  <div className="search-input-wrap">
+                    <input
+                      type="search"
+                      value={query}
+                      onChange={(event) => {
+                        setQuery(event.target.value);
+                        setSuggestionsOpen(true);
+                      }}
+                      onFocus={() => setSuggestionsOpen(true)}
+                      placeholder="Cari saham, IHSG, inflasi, suku bunga..."
+                      aria-label="Kata kunci pencarian"
+                      autoComplete="off"
+                    />
+
+                    {suggestions.length > 0 && (
+                      <div className="suggestions" role="listbox">
+                        {suggestions.map((suggestion) => (
+                          <button
+                            type="button"
+                            key={suggestion}
+                            className="suggestion-item"
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => searchSuggestion(suggestion)}
+                          >
+                            <span>{suggestion}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button type="submit" disabled={loading}>
+                    {loading ? "Mencari" : "Cari"}
+                  </button>
+                </form>
+
+                <div className="controls-row">
+                  <TypeFacets value={tipe} facets={typeFacets} onChange={changeType} />
+
+                  <label className="sort-control">
+                    <span>Urutkan</span>
+                    <select
+                      value={sortBy}
+                      onChange={(event) => setSortBy(event.target.value)}
+                    >
+                      {SORT_OPTIONS.map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section className="results-panel">
+                <div className="result-summary">
+                  <span>
+                    {data ? `${data.total} hasil` : "Mencari hasil"}
+                    {data?.query ? ` untuk "${data.query}"` : ""}
+                  </span>
+                  {data && <span>Halaman {page} dari {totalPages}</span>}
+                </div>
+
+                {error && <div className="notice error-notice">{error}</div>}
+                {!error && loading && <div className="notice">Memuat hasil...</div>}
+
+                {!loading && !error && data?.results?.length === 0 && (
+                  <div className="notice">Tidak ada hasil.</div>
+                )}
+
+                <div className="result-list">
+                  {data?.results?.map((item) => (
+                    <ResultItem key={item.id} item={item} />
+                  ))}
+                </div>
+
+                {data && totalPages > 1 && (
+                  <div className="pagination">
+                    <button
+                      type="button"
+                      disabled={page <= 1 || loading}
+                      onClick={() => search(page - 1)}
+                    >
+                      Sebelumnya
+                    </button>
+                    <span>{page} / {totalPages}</span>
+                    <button
+                      type="button"
+                      disabled={page >= totalPages || loading}
+                      onClick={() => search(page + 1)}
+                    >
+                      Berikutnya
+                    </button>
+                  </div>
+                )}
+              </section>
             </div>
-
-            {error && <div className="notice error-notice">{error}</div>}
-            {!error && loading && <div className="notice">Memuat hasil...</div>}
-
-            {!loading && !error && data?.results?.length === 0 && (
-              <div className="notice">Tidak ada hasil.</div>
-            )}
-
-            <div className="result-list">
-              {data?.results?.map((item) => (
-                <ResultItem key={item.id} item={item} />
-              ))}
-            </div>
-
-            {data && totalPages > 1 && (
-              <div className="pagination">
-                <button
-                  type="button"
-                  disabled={page <= 1 || loading}
-                  onClick={() => search(page - 1)}
-                >
-                  Sebelumnya
-                </button>
-                <span>{page} / {totalPages}</span>
-                <button
-                  type="button"
-                  disabled={page >= totalPages || loading}
-                  onClick={() => search(page + 1)}
-                >
-                  Berikutnya
-                </button>
-              </div>
-            )}
           </section>
         )}
       </main>

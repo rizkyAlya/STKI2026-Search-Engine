@@ -446,6 +446,7 @@ h1 span {
 }
 
 .info-card,
+.side-card,
 .result-item,
 .notice {
   border: 1px solid rgba(17, 74, 141, 0.13);
@@ -458,7 +459,8 @@ h1 span {
   padding: 22px;
 }
 
-.info-card h2 {
+.info-card h2,
+.side-card h2 {
   margin: 0 0 18px;
   color: #10233f;
   font-size: 1.2rem;
@@ -581,8 +583,152 @@ h1 span {
   text-align: right;
 }
 
+.search-workspace {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  padding: 26px 0 48px;
+}
+
+.info-sidebar {
+  position: sticky;
+  top: 92px;
+  width: 296px;
+  display: grid;
+  gap: 12px;
+  transition: width 180ms ease;
+}
+
+.info-sidebar.closed {
+  width: 112px;
+}
+
+.sidebar-toggle {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid rgba(17, 74, 141, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #114a8d;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(17, 74, 141, 0.08);
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus {
+  border-color: rgba(209, 154, 22, 0.55);
+  background: #fff6dc;
+}
+
+.sidebar-content {
+  display: grid;
+  gap: 12px;
+}
+
+.side-card {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.side-card h2 {
+  margin-bottom: 12px;
+  font-size: 1rem;
+}
+
+.side-card .project-list div {
+  min-height: 42px;
+}
+
+.side-card .project-list strong {
+  font-size: 0.84rem;
+}
+
+.side-card .popular-list button {
+  min-height: 50px;
+}
+
+.side-card .team-list strong {
+  font-size: 0.88rem;
+}
+
+.search-results-area {
+  min-width: 0;
+}
+
+.compact-search-section {
+  position: sticky;
+  z-index: 30;
+  top: 92px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(17, 74, 141, 0.13);
+  border-radius: 8px;
+  background: rgba(247, 250, 255, 0.94);
+  box-shadow: 0 14px 34px rgba(17, 74, 141, 0.1);
+  backdrop-filter: blur(14px);
+}
+
+.compact-search {
+  margin: 0;
+  padding: 7px;
+  border: 1px solid rgba(17, 74, 141, 0.28);
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+.compact-search .search-form input,
+.compact-search input {
+  min-height: 48px;
+}
+
+.compact-search > button {
+  min-height: 48px;
+}
+
+.compact-filters {
+  margin-top: 0;
+}
+
+.controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.controls-row .filters {
+  margin-top: 0;
+}
+
+.sort-control {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid rgba(17, 74, 141, 0.16);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #53627b;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.sort-control select {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 28px 0 10px;
+  background: #fff6dc;
+  color: #10233f;
+  font-weight: 900;
+  outline: none;
+}
+
 .results-panel {
-  padding: 22px 0 48px;
+  padding: 18px 0 0;
 }
 
 .result-summary {
@@ -731,6 +877,24 @@ mark {
     grid-template-columns: 1fr;
   }
 
+  .search-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .info-sidebar,
+  .info-sidebar.closed {
+    position: static;
+    width: 100%;
+  }
+
+  .info-sidebar.closed .sidebar-toggle {
+    width: fit-content;
+  }
+
+  .compact-search-section {
+    top: 82px;
+  }
+
   .hero-section {
     min-height: auto;
     padding-top: 48px;
@@ -778,7 +942,8 @@ mark {
   }
 
   .hero-search,
-  .search-form {
+  .search-form,
+  .compact-search {
     grid-template-columns: 1fr;
     border-radius: 20px;
   }
@@ -793,6 +958,21 @@ mark {
 
   .filters button {
     flex: 1;
+  }
+
+  .controls-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sort-control {
+    width: 100%;
+    justify-content: space-between;
+    border-radius: 8px;
+  }
+
+  .sort-control select {
+    min-width: 156px;
   }
 
   .left-visual,

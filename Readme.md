@@ -242,6 +242,19 @@ Contoh:
 http://127.0.0.1:5000/api/search?q=saham&page=1&limit=10
 ```
 
+Sorting hasil:
+
+```text
+http://127.0.0.1:5000/api/search?q=saham&sort=title_asc
+```
+
+Pilihan sort:
+
+- `relevance`
+- `title_asc`
+- `title_desc`
+- `type_asc`
+
 Filter berdasarkan tipe dokumen:
 
 ```text
@@ -263,6 +276,7 @@ Body:
   "query": "suku bunga",
   "page": 1,
   "limit": 10,
+  "sort": "relevance",
   "tipe": "web"
 }
 ```
@@ -274,6 +288,21 @@ Contoh response:
   "query": "suku bunga",
   "page": 1,
   "limit": 10,
+  "sort": "relevance",
+  "facets": {
+    "tipe": [
+      {
+        "value": "pdf",
+        "label": "PDF",
+        "count": 50
+      },
+      {
+        "value": "web",
+        "label": "Web",
+        "count": 47
+      }
+    ]
+  },
   "total": 12,
   "results": [
     {
