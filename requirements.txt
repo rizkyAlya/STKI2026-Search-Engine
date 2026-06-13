@@ -1,4 +1,6 @@
 beautifulsoup4
+Flask
+flask-cors
 pycryptodome
 PyPDF2
 requests

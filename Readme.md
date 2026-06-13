@@ -174,11 +174,137 @@ http://localhost:8983/solr/dokumen/select?q=konten:saham
 
 ## 9. Tahap Berikutnya: Search Engine
 
-Tahap berikutnya adalah membuat aplikasi search engine sederhana yang:
+Backend search engine sederhana dibuat menggunakan Flask di file:
 
-- menerima input kata kunci dari user
-- mengirim query ke Solr
-- menampilkan daftar hasil pencarian
-- menampilkan judul, sumber, tipe dokumen, dan cuplikan isi
+```text
+app.py
+```
 
-Bagian ini akan ditambahkan setelah pipeline indexing selesai dan data sudah berhasil masuk ke Solr.
+Backend ini menyediakan API untuk React atau frontend lain.
+
+### Menjalankan Backend Flask
+
+Pastikan Solr sudah berjalan dan data sudah berhasil di-index.
+
+Install dependency:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+Jalankan Flask:
+
+```bash
+python app.py
+```
+
+Backend akan berjalan di:
+
+```text
+http://127.0.0.1:5000
+```
+
+### Endpoint API
+
+Cek status backend dan koneksi Solr:
+
+```http
+GET /api/health
+```
+
+Contoh:
+
+```text
+http://127.0.0.1:5000/api/health
+```
+
+Pencarian dengan GET:
+
+```http
+GET /api/search?q=saham&page=1&limit=10
+```
+
+Contoh:
+
+```text
+http://127.0.0.1:5000/api/search?q=saham&page=1&limit=10
+```
+
+Filter berdasarkan tipe dokumen:
+
+```text
+http://127.0.0.1:5000/api/search?q=inflasi&tipe=web
+http://127.0.0.1:5000/api/search?q=pasar modal&tipe=pdf
+```
+
+Pencarian dengan POST:
+
+```http
+POST /api/search
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "query": "suku bunga",
+  "page": 1,
+  "limit": 10,
+  "tipe": "web"
+}
+```
+
+Contoh response:
+
+```json
+{
+  "query": "suku bunga",
+  "page": 1,
+  "limit": 10,
+  "total": 12,
+  "results": [
+    {
+      "id": "web-abc",
+      "judul": "Judul artikel",
+      "sumber": "https://contoh.com/artikel",
+      "tipe": "web",
+      "url": "https://contoh.com/artikel",
+      "score": 4.2,
+      "snippet": "Cuplikan isi artikel..."
+    }
+  ]
+}
+```
+
+### Konfigurasi Opsional
+
+Secara default backend membaca Solr dari:
+
+```text
+http://localhost:8983/solr
+```
+
+dan collection:
+
+```text
+dokumen
+```
+
+Jika ingin mengganti, gunakan environment variable:
+
+```bash
+set SOLR_URL=http://localhost:8983/solr
+set SOLR_COLLECTION=dokumen
+python app.py
+```
+
+### Tahap Berikutnya: Frontend React
+
+Frontend React nanti cukup memanggil endpoint:
+
+```text
+GET http://127.0.0.1:5000/api/search?q=kata_kunci
+```
+
+Lalu menampilkan field `judul`, `snippet`, `sumber`, `tipe`, dan `score` dari `results`.
