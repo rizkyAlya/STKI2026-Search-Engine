@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 const PAGE_SIZE = 10;
@@ -60,6 +60,8 @@ const SORT_OPTIONS = [
   ["title_desc", "Judul Z-A"],
   ["type_asc", "Tipe dokumen"],
 ];
+const VALID_SORTS = new Set(SORT_OPTIONS.map(([value]) => value));
+const VALID_TYPES = new Set(["", "pdf", "web"]);
 const TOPIC_RULES = [
   ["IHSG", ["ihsg", "indeks harga saham gabungan"]],
   ["Saham", ["saham", "pasar saham", "harga saham"]],
@@ -69,6 +71,68 @@ const TOPIC_RULES = [
   ["Laporan Keuangan", ["laporan keuangan", "kinerja keuangan", "laba", "pendapatan", "kuartal"]],
   ["Berita Pasar", ["berita", "sentimen", "market", "trading halt", "buyback", "msci"]],
 ];
+
+function parsePage(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+function getInitialSearchState() {
+  if (typeof window === "undefined") {
+    return {
+      query: "",
+      tipe: "",
+      tahun: "",
+      sortBy: "relevance",
+      page: 1,
+    };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const tipe = params.get("tipe") || "";
+  const sortBy = params.get("sort") || "relevance";
+
+  return {
+    query: params.get("q") || "",
+    tipe: VALID_TYPES.has(tipe) ? tipe : "",
+    tahun: params.get("tahun") || "",
+    sortBy: VALID_SORTS.has(sortBy) ? sortBy : "relevance",
+    page: parsePage(params.get("page")),
+  };
+}
+
+function writeSearchUrl({ query, tipe, tahun, sortBy, page }, replace = false) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const params = new URLSearchParams();
+  const trimmedQuery = query.trim();
+
+  if (trimmedQuery) {
+    params.set("q", trimmedQuery);
+  }
+  if (tipe) {
+    params.set("tipe", tipe);
+  }
+  if (tahun) {
+    params.set("tahun", tahun);
+  }
+  if (sortBy && sortBy !== "relevance") {
+    params.set("sort", sortBy);
+  }
+  if (page > 1) {
+    params.set("page", String(page));
+  }
+
+  const search = params.toString();
+  const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}`;
+
+  if (nextUrl !== currentUrl) {
+    window.history[replace ? "replaceState" : "pushState"]({}, "", nextUrl);
+  }
+}
 
 function safeHighlight(value) {
   return String(value || "")
@@ -104,6 +168,40 @@ function getOpenTarget(item) {
   }
 
   return "";
+}
+
+function getSourceLabel(item) {
+  const source = item.url || item.sumber || "";
+
+  if (item.tipe === "pdf") {
+    return "PDF Lokal";
+  }
+
+  try {
+    const url = new URL(source);
+    return url.hostname.replace(/^www\./, "");
+  } catch {
+    return source || "Sumber tidak diketahui";
+  }
+}
+
+function getBreadcrumbs(item, topics) {
+  const items = [getSourceLabel(item)];
+  const filename = getPdfFilename(item);
+
+  if (item.tipe === "pdf" && filename) {
+    items.push(filename);
+  }
+
+  if (topics[0]) {
+    items.push(topics[0]);
+  }
+
+  if (item.tahun) {
+    items.push(String(item.tahun));
+  }
+
+  return items;
 }
 
 function getLocalSuggestions(value) {
@@ -159,26 +257,34 @@ function ResultItem({ item }) {
   const openTarget = getOpenTarget(item);
   const title = item.judul || "Tanpa judul";
   const topics = getResultTopics(item);
+  const breadcrumbs = getBreadcrumbs(item, topics);
 
   return (
     <article className="result-item">
       <div className="result-topline">
         <div className="result-meta">
           <DocumentIcon type={item.tipe} />
-          <div className="topic-badges" aria-label="Topik dokumen">
-            {topics.length > 0 ? (
-              topics.map((topic) => (
-                <span key={topic} className="topic-badge">
-                  {topic}
-                </span>
-              ))
-            ) : (
-              <span className="topic-badge muted">Dokumen</span>
-            )}
+          <div className="source-block">
+            <div className="source-trail" aria-label="Sumber dokumen">
+              {breadcrumbs.map((crumb, index) => (
+                <span key={`${crumb}-${index}`}>{crumb}</span>
+              ))}
+            </div>
+            <div className="topic-badges" aria-label="Topik dokumen">
+              {topics.length > 0 ? (
+                topics.map((topic) => (
+                  <span key={topic} className="topic-badge">
+                    {topic}
+                  </span>
+                ))
+              ) : (
+                <span className="topic-badge muted">Dokumen</span>
+              )}
+            </div>
           </div>
         </div>
-        {typeof item.score === "number" && (
-          <span className="score">Score {item.score.toFixed(2)}</span>
+        {typeof item.relevansi === "number" && (
+          <span className="relevance-badge">{item.relevansi}% relevansi</span>
         )}
       </div>
 
@@ -238,32 +344,57 @@ function TypeFacets({ value, facets, onChange }) {
   );
 }
 
-function YearFacets({ value, facets, onChange }) {
-  if (!facets?.length) {
+function YearFacets({ value, facets, loading, onChange }) {
+  const [open, setOpen] = useState(true);
+  const hasFacets = facets?.length > 0;
+
+  if (!hasFacets && !loading) {
     return null;
   }
 
   return (
-    <aside className="year-facet-panel" aria-label="Faceted search tahun">
-      <h2>Tahun</h2>
+    <aside className={`year-facet-panel ${open ? "open" : "closed"}`} aria-label="Faceted search tahun">
       <button
         type="button"
-        className={value === "" ? "active" : ""}
-        onClick={() => onChange("")}
+        className="year-facet-toggle"
+        onClick={() => setOpen((current) => !current)}
+        aria-expanded={open}
       >
-        <span>Semua tahun</span>
+        <span>
+          <strong>Tahun</strong>
+          <small>{value || "Semua tahun"}</small>
+        </span>
+        <i aria-hidden="true" />
       </button>
-      {facets.map((facet) => (
-        <button
-          type="button"
-          key={facet.value}
-          className={value === facet.value ? "active" : ""}
-          onClick={() => onChange(facet.value)}
-        >
-          <span>{facet.label}</span>
-          <strong>{facet.count}</strong>
-        </button>
-      ))}
+
+      {open && (
+        <div className="year-facet-options">
+          {hasFacets ? (
+            <>
+              <button
+                type="button"
+                className={value === "" ? "active" : ""}
+                onClick={() => onChange("")}
+              >
+                <span>Semua tahun</span>
+              </button>
+              {facets.map((facet) => (
+                <button
+                  type="button"
+                  key={facet.value}
+                  className={value === facet.value ? "active" : ""}
+                  onClick={() => onChange(facet.value)}
+                >
+                  <span>{facet.label}</span>
+                  <strong>{facet.count}</strong>
+                </button>
+              ))}
+            </>
+          ) : (
+            <div className="year-facet-loading">Memuat tahun...</div>
+          )}
+        </div>
+      )}
     </aside>
   );
 }
@@ -335,12 +466,15 @@ function InfoSidebar({ open, onToggle, onSearchSuggestion }) {
 }
 
 function App() {
-  const [query, setQuery] = useState("");
-  const [tipe, setTipe] = useState("");
-  const [tahun, setTahun] = useState("");
-  const [sortBy, setSortBy] = useState("relevance");
-  const [page, setPage] = useState(1);
+  const initialSearch = useMemo(() => getInitialSearchState(), []);
+  const resultsTopRef = useRef(null);
+  const [query, setQuery] = useState(initialSearch.query);
+  const [tipe, setTipe] = useState(initialSearch.tipe);
+  const [tahun, setTahun] = useState(initialSearch.tahun);
+  const [sortBy, setSortBy] = useState(initialSearch.sortBy);
+  const [page, setPage] = useState(initialSearch.page);
   const [data, setData] = useState(null);
+  const [lastYearFacets, setLastYearFacets] = useState([]);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -348,7 +482,7 @@ function App() {
   const [error, setError] = useState("");
   const searchMode = Boolean(data || loading || error);
   const typeFacets = data?.facets?.tipe || [];
-  const yearFacets = data?.facets?.tahun || [];
+  const yearFacets = data?.facets?.tahun || lastYearFacets;
 
   const totalPages = useMemo(() => {
     if (!data?.total) return 1;
@@ -376,12 +510,30 @@ function App() {
     }
   }
 
-  async function search(nextPage = page) {
-    const trimmedQuery = query.trim();
+  async function runSearch({
+    queryValue = query,
+    pageValue = page,
+    tipeValue = tipe,
+    tahunValue = tahun,
+    sortValue = sortBy,
+    replaceUrl = false,
+  } = {}) {
+    const trimmedQuery = queryValue.trim();
     if (!trimmedQuery) {
       setData(null);
+      setLastYearFacets([]);
       setPage(1);
       setError("");
+      writeSearchUrl(
+        {
+          query: "",
+          tipe: "",
+          tahun: "",
+          sortBy: "relevance",
+          page: 1,
+        },
+        replaceUrl,
+      );
       return;
     }
 
@@ -392,16 +544,16 @@ function App() {
 
     const params = new URLSearchParams({
       q: trimmedQuery,
-      page: String(nextPage),
+      page: String(pageValue),
       limit: String(PAGE_SIZE),
-      sort: sortBy,
+      sort: sortValue,
     });
 
-    if (tipe) {
-      params.set("tipe", tipe);
+    if (tipeValue) {
+      params.set("tipe", tipeValue);
     }
-    if (tahun) {
-      params.set("tahun", tahun);
+    if (tahunValue) {
+      params.set("tahun", tahunValue);
     }
 
     try {
@@ -413,7 +565,18 @@ function App() {
       }
 
       setData(payload);
-      setPage(nextPage);
+      setLastYearFacets(payload.facets?.tahun || []);
+      setPage(pageValue);
+      writeSearchUrl(
+        {
+          query: trimmedQuery,
+          tipe: tipeValue,
+          tahun: tahunValue,
+          sortBy: sortValue,
+          page: pageValue,
+        },
+        replaceUrl,
+      );
     } catch (err) {
       setData(null);
       setError(err.message);
@@ -422,58 +585,106 @@ function App() {
     }
   }
 
+  async function search(nextPage = page) {
+    return runSearch({ pageValue: nextPage });
+  }
+
+  async function changePage(nextPage) {
+    await search(nextPage);
+    requestAnimationFrame(() => {
+      resultsTopRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
+  function resetSearchControls() {
+    setTipe("");
+    setTahun("");
+    setSortBy("relevance");
+    setPage(1);
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
+    const trimmedQuery = query.trim();
+    const previousQuery = String(data?.query || "").trim();
+
+    if (!trimmedQuery || trimmedQuery !== previousQuery) {
+      resetSearchControls();
+      runSearch({
+        queryValue: trimmedQuery,
+        pageValue: 1,
+        tipeValue: "",
+        tahunValue: "",
+        sortValue: "relevance",
+      });
+      return;
+    }
+
     search(1);
   }
 
   async function searchSuggestion(term) {
     setQuery(term);
     setSuggestionsOpen(false);
-    setLoading(true);
-    setData(null);
-    setError("");
-
-    const params = new URLSearchParams({
-      q: term,
-      page: "1",
-      limit: String(PAGE_SIZE),
-      sort: sortBy,
+    resetSearchControls();
+    await runSearch({
+      queryValue: term,
+      pageValue: 1,
+      tipeValue: "",
+      tahunValue: "",
+      sortValue: "relevance",
     });
-
-    if (tipe) {
-      params.set("tipe", tipe);
-    }
-    if (tahun) {
-      params.set("tahun", tahun);
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/search?${params}`);
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.message || payload.error || "Pencarian gagal");
-      }
-
-      setData(payload);
-      setPage(1);
-    } catch (err) {
-      setData(null);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
   }
 
   function changeType(nextType) {
     setTipe(nextType);
     setPage(1);
+    if (data && query.trim()) {
+      runSearch({ tipeValue: nextType, pageValue: 1 });
+    }
   }
 
   function changeYear(nextYear) {
     setTahun(nextYear);
     setPage(1);
+    if (data && query.trim()) {
+      runSearch({ tahunValue: nextYear, pageValue: 1 });
+    }
+  }
+
+  function changeSort(nextSort) {
+    setSortBy(nextSort);
+    setPage(1);
+    if (data && query.trim()) {
+      runSearch({ sortValue: nextSort, pageValue: 1 });
+    }
+  }
+
+  function goHome() {
+    setQuery("");
+    setTipe("");
+    setTahun("");
+    setSortBy("relevance");
+    setPage(1);
+    setData(null);
+    setLastYearFacets([]);
+    setError("");
+    setLoading(false);
+    setSuggestionsOpen(false);
+    writeSearchUrl(
+      {
+        query: "",
+        tipe: "",
+        tahun: "",
+        sortBy: "relevance",
+        page: 1,
+      },
+      false,
+    );
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   useEffect(() => {
@@ -481,21 +692,65 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (data && query.trim()) {
-      search(1);
+    if (initialSearch.query.trim()) {
+      runSearch({
+        queryValue: initialSearch.query,
+        pageValue: initialSearch.page,
+        tipeValue: initialSearch.tipe,
+        tahunValue: initialSearch.tahun,
+        sortValue: initialSearch.sortBy,
+        replaceUrl: true,
+      });
     }
-  }, [tipe, tahun, sortBy]);
+  }, []);
+
+  useEffect(() => {
+    function handlePopState() {
+      const nextSearch = getInitialSearchState();
+      setQuery(nextSearch.query);
+      setTipe(nextSearch.tipe);
+      setTahun(nextSearch.tahun);
+      setSortBy(nextSearch.sortBy);
+      setPage(nextSearch.page);
+      setSuggestionsOpen(false);
+
+      if (nextSearch.query.trim()) {
+        runSearch({
+          queryValue: nextSearch.query,
+          pageValue: nextSearch.page,
+          tipeValue: nextSearch.tipe,
+          tahunValue: nextSearch.tahun,
+          sortValue: nextSearch.sortBy,
+          replaceUrl: true,
+        });
+      } else {
+        setData(null);
+        setError("");
+      }
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   return (
     <div className="page-shell">
       <header className="site-header">
-        <div className="brand">
+        <button
+          type="button"
+          className="brand brand-button"
+          onClick={goHome}
+          aria-label="Kembali ke beranda"
+          title="Kembali ke beranda"
+        >
           <BrandMark />
           <span>Nusa<span>Stock</span></span>
-        </div>
-        <div className={`health ${health?.ok ? "health-ok" : "health-error"}`}>
-          <span className="health-dot" />
-          <span>{health?.ok ? `${health.total_documents} dokumen` : "Offline"}</span>
+        </button>
+        <div className="header-actions">
+          <div className={`health ${health?.ok ? "health-ok" : "health-error"}`}>
+            <span className="health-dot" />
+            <span>{health?.ok ? `${health.total_documents} dokumen` : "Offline"}</span>
+          </div>
         </div>
       </header>
 
@@ -660,28 +915,28 @@ function App() {
                     {loading ? "Mencari" : "Cari"}
                   </button>
                 </form>
-
-                <div className="controls-row">
-                  <TypeFacets value={tipe} facets={typeFacets} onChange={changeType} />
-
-                  <label className="sort-control">
-                    <span>Urutkan</span>
-                    <select
-                      value={sortBy}
-                      onChange={(event) => setSortBy(event.target.value)}
-                    >
-                      {SORT_OPTIONS.map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
               </section>
 
+              <div className="controls-row">
+                <TypeFacets value={tipe} facets={typeFacets} onChange={changeType} />
+
+                <label className="sort-control">
+                  <span>Urutkan</span>
+                  <select
+                    value={sortBy}
+                    onChange={(event) => changeSort(event.target.value)}
+                  >
+                    {SORT_OPTIONS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
               <div className="results-layout">
-                <section className="results-panel">
+                <section className="results-panel" ref={resultsTopRef}>
                   <div className="result-summary">
                     <span>
                       {data ? `${data.total} hasil` : "Mencari hasil"}
@@ -709,28 +964,41 @@ function App() {
                       <button
                         type="button"
                         disabled={page <= 1 || loading}
-                        onClick={() => search(page - 1)}
+                        onClick={() => changePage(page - 1)}
+                        aria-label="Halaman sebelumnya"
+                        title="Halaman sebelumnya"
                       >
-                        Sebelumnya
+                        <span className="pagination-icon icon-prev" aria-hidden="true" />
                       </button>
-                      <span>{page} / {totalPages}</span>
+                      <span className="pagination-page">{page} / {totalPages}</span>
                       <button
                         type="button"
                         disabled={page >= totalPages || loading}
-                        onClick={() => search(page + 1)}
+                        onClick={() => changePage(page + 1)}
+                        aria-label="Halaman berikutnya"
+                        title="Halaman berikutnya"
                       >
-                        Berikutnya
+                        <span className="pagination-icon icon-next" aria-hidden="true" />
                       </button>
                     </div>
                   )}
                 </section>
 
-                <YearFacets value={tahun} facets={yearFacets} onChange={changeYear} />
+                <YearFacets
+                  value={tahun}
+                  facets={yearFacets}
+                  loading={loading}
+                  onChange={changeYear}
+                />
               </div>
             </div>
           </section>
         )}
       </main>
+      <footer className="site-footer">
+        <span>Tugas UAS mata kuliah Sistem Temu Kembali Informasi tahun 2026.</span>
+        <small>Dosen pengampu: Ari Nugraha, S.Hum., M.TI., Ph.D.</small>
+      </footer>
     </div>
   );
 }

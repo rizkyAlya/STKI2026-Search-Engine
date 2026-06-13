@@ -162,12 +162,26 @@ def extract_topics(title, content):
     return topics[:3]
 
 
-def normalize_documents(docs, highlighting):
+def relevance_percentage(score, max_score):
+    try:
+        score = float(score)
+        max_score = float(max_score)
+    except (TypeError, ValueError):
+        return None
+
+    if score <= 0 or max_score <= 0:
+        return None
+
+    return max(1, min(100, round((score / max_score) * 100)))
+
+
+def normalize_documents(docs, highlighting, max_score=None):
     results = []
     for doc in docs:
         doc = scalarize_document(doc)
         content = doc.pop("konten", "")
         doc["topik"] = extract_topics(doc.get("judul", ""), content)
+        doc["relevansi"] = relevance_percentage(doc.get("score"), max_score)
         doc["snippet"] = normalize_highlight(highlighting, doc.get("id", ""), content)
         results.append(doc)
     return results
@@ -257,7 +271,7 @@ def search_solr(query, page, limit, tipe=None, tahun=None, sort_by="relevance"):
     docs = solr_response.get("docs", [])
     highlighting = data.get("highlighting", {})
 
-    results = normalize_documents(docs, highlighting)
+    results = normalize_documents(docs, highlighting, solr_response.get("maxScore"))
     if needs_local_sort:
         results = sort_documents(results, sort_by)[start : start + limit]
 
