@@ -15,6 +15,7 @@ DEFAULT_SOLR_URL = "http://localhost:8983/solr"
 DEFAULT_COLLECTION = "dokumen"
 DEFAULT_PDF_DIR = Path("data/pdfs")
 DEFAULT_URL_CSV = Path("data/urls/scrap_list.csv")
+DEFAULT_PDF_TITLE_CSV = Path("data/pdfs/pdf_titles.csv")
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -56,16 +57,40 @@ def extract_pdf_text(pdf_path):
     return clean_text("\n".join(text_parts))
 
 
-def pdf_title(pdf_path):
+def load_pdf_titles(csv_path):
+    titles = {}
+    if not csv_path.exists():
+        return titles
+
+    with csv_path.open(newline="", encoding="utf-8-sig") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            raw_name = clean_text(row.get("nama", ""))
+            title = clean_text(row.get("judul", ""))
+            year = clean_text(row.get("tahun", ""))
+            if not raw_name or not title:
+                continue
+
+            filename = raw_name if raw_name.lower().endswith(".pdf") else f"{raw_name}.pdf"
+            titles[filename] = {"judul": title, "tahun": year}
+
+    return titles
+
+
+def pdf_title(pdf_path, title_map=None):
+    mapped = (title_map or {}).get(pdf_path.name)
+    if mapped:
+        return mapped["judul"], mapped.get("tahun", "")
+
     try:
         metadata = PdfReader(str(pdf_path)).metadata
         title = clean_text(metadata.title) if metadata and metadata.title else ""
-        return title or pdf_path.stem
+        return title or pdf_path.stem, ""
     except Exception:
-        return pdf_path.stem
+        return pdf_path.stem, ""
 
 
-def build_pdf_documents(pdf_dir):
+def build_pdf_documents(pdf_dir, title_map=None):
     pdf_paths = sorted(pdf_dir.glob("*.pdf"), key=lambda item: item.name)
 
     for pdf_path in pdf_paths:
@@ -75,8 +100,8 @@ def build_pdf_documents(pdf_dir):
                 yield None, f"{pdf_path}: tidak ada teks yang bisa diekstrak"
                 continue
 
-            title = pdf_title(pdf_path)
-            yield {
+            title, year = pdf_title(pdf_path, title_map)
+            document = {
                 "id": make_id("pdf", pdf_path.resolve()),
                 "judul": title,
                 "konten": content,
@@ -84,19 +109,29 @@ def build_pdf_documents(pdf_dir):
                 "tipe": "pdf",
                 "nama_file": pdf_path.name,
                 "_text_": f"{title} {content}",
-            }, None
+            }
+            if year:
+                document["tahun"] = year
+
+            yield document, None
         except Exception as exc:
             yield None, f"{pdf_path}: {exc}"
 
 
 def read_urls(csv_path):
+    for record in read_url_records(csv_path):
+        yield record["url"]
+
+
+def read_url_records(csv_path):
     with csv_path.open(newline="", encoding="utf-8") as csv_file:
         reader = csv.DictReader(csv_file)
         if reader.fieldnames and "url" in reader.fieldnames:
             for row in reader:
                 url = clean_text(row.get("url", ""))
+                year = clean_text(row.get("tahun", ""))
                 if url:
-                    yield url
+                    yield {"url": url, "tahun": year}
             return
 
     with csv_path.open(newline="", encoding="utf-8") as csv_file:
@@ -106,10 +141,10 @@ def read_urls(csv_path):
                 continue
             url = clean_text(row[0])
             if url and url.lower() != "url":
-                yield url
+                yield {"url": url, "tahun": ""}
 
 
-def scrape_url(url, timeout):
+def scrape_url(url, timeout, year=""):
     response = requests.get(
         url,
         headers=REQUEST_HEADERS,
@@ -130,7 +165,7 @@ def scrape_url(url, timeout):
     if not content:
         raise ValueError("body halaman kosong")
 
-    return {
+    document = {
         "id": make_id("web", url),
         "judul": title,
         "konten": content,
@@ -139,12 +174,17 @@ def scrape_url(url, timeout):
         "url": url,
         "_text_": f"{title} {content}",
     }
+    if year:
+        document["tahun"] = year
+
+    return document
 
 
 def build_web_documents(csv_path, timeout, delay):
-    for url in read_urls(csv_path):
+    for record in read_url_records(csv_path):
+        url = record["url"]
         try:
-            yield scrape_url(url, timeout), None
+            yield scrape_url(url, timeout, record.get("tahun", "")), None
         except Exception as exc:
             yield None, f"{url}: {exc}"
 
@@ -220,6 +260,7 @@ def parse_args():
     parser.add_argument("--solr-url", default=DEFAULT_SOLR_URL)
     parser.add_argument("--collection", default=DEFAULT_COLLECTION)
     parser.add_argument("--pdf-dir", type=Path, default=DEFAULT_PDF_DIR)
+    parser.add_argument("--pdf-title-csv", type=Path, default=DEFAULT_PDF_TITLE_CSV)
     parser.add_argument("--url-csv", type=Path, default=DEFAULT_URL_CSV)
     parser.add_argument("--batch-size", type=int, default=10)
     parser.add_argument("--timeout", type=int, default=25)
@@ -256,7 +297,7 @@ def main():
 
         streams = []
         if not args.skip_pdf:
-            streams.append(build_pdf_documents(args.pdf_dir))
+            streams.append(build_pdf_documents(args.pdf_dir, load_pdf_titles(args.pdf_title_csv)))
         if not args.skip_web:
             streams.append(build_web_documents(args.url_csv, args.timeout, args.delay))
 

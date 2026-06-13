@@ -731,6 +731,61 @@ h1 span {
   padding: 18px 0 0;
 }
 
+.results-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 16px;
+  align-items: start;
+}
+
+.year-facet-panel {
+  position: sticky;
+  top: 244px;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid rgba(17, 74, 141, 0.13);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 14px 34px rgba(17, 74, 141, 0.1);
+}
+
+.year-facet-panel h2 {
+  margin: 0 0 12px;
+  color: #10233f;
+  font-size: 1rem;
+}
+
+.year-facet-panel button {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid #e7edf5;
+  background: transparent;
+  color: #53627b;
+  font-weight: 900;
+  text-align: left;
+}
+
+.year-facet-panel button:last-child {
+  border-bottom: 0;
+}
+
+.year-facet-panel button:hover,
+.year-facet-panel button:focus,
+.year-facet-panel button.active {
+  color: #114a8d;
+  background: #fff6dc;
+}
+
+.year-facet-panel strong {
+  color: #9b7419;
+}
+
 .result-summary {
   min-height: 34px;
   display: flex;
@@ -763,6 +818,9 @@ h1 span {
 
 .result-item {
   padding: 18px;
+  height: 232px;
+  display: flex;
+  flex-direction: column;
 }
 
 .result-topline {
@@ -774,31 +832,115 @@ h1 span {
   margin-bottom: 8px;
 }
 
-.type-badge {
-  min-width: 44px;
+.result-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.document-icon {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(17, 74, 141, 0.14);
+}
+
+.document-icon span {
+  position: relative;
+  display: block;
+}
+
+.pdf-icon {
+  background: #fff2cf;
+}
+
+.pdf-icon span {
+  width: 13px;
+  height: 17px;
+  border: 2px solid #9b7419;
+  border-radius: 2px;
+}
+
+.pdf-icon span::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  border-left: 2px solid #9b7419;
+  border-bottom: 2px solid #9b7419;
+  background: #fff2cf;
+}
+
+.web-icon {
   background: #e7eef8;
-  color: #114a8d;
+}
+
+.web-icon span {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #114a8d;
+  border-radius: 50%;
+}
+
+.web-icon span::before,
+.web-icon span::after {
+  content: "";
+  position: absolute;
+  background: #114a8d;
+}
+
+.web-icon span::before {
+  left: 2px;
+  right: 2px;
+  top: 6px;
+  height: 2px;
+}
+
+.web-icon span::after {
+  top: 2px;
+  bottom: 2px;
+  left: 6px;
+  width: 2px;
+}
+
+.topic-badges {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.topic-badge {
+  max-width: 152px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid rgba(209, 154, 22, 0.28);
+  border-radius: 999px;
+  background: #fff8e5;
+  color: #7c5a0d;
   font-size: 0.78rem;
   font-weight: 900;
-  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.type-pdf {
-  background: #fff2cf;
-  color: #8a620d;
-}
-
-.type-web {
-  background: #e7eef8;
-  color: #114a8d;
+.topic-badge.muted {
+  border-color: rgba(17, 74, 141, 0.12);
+  background: #eef4fb;
+  color: #516985;
 }
 
 .score {
+  flex: 0 0 auto;
   color: #71809a;
   font-size: 0.84rem;
   font-weight: 800;
@@ -810,6 +952,11 @@ h1 span {
   font-size: 1.1rem;
   line-height: 1.35;
   letter-spacing: 0;
+  min-height: 2.7em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .title-link {
@@ -843,6 +990,10 @@ h1 span {
   color: #34445c;
   font-size: 0.96rem;
   line-height: 1.65;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 mark {
@@ -879,6 +1030,15 @@ mark {
 
   .search-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .results-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .year-facet-panel {
+    position: static;
+    order: -1;
   }
 
   .info-sidebar,
@@ -987,6 +1147,12 @@ mark {
 
   .result-item {
     padding: 15px;
+    height: 248px;
+  }
+
+  .result-topline {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .pagination {

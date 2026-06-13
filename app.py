@@ -45,6 +45,15 @@ SUGGEST_STOPWORDS = {
     "untuk",
     "yang",
 }
+TOPIC_RULES = [
+    ("IHSG", ("ihsg", "indeks harga saham gabungan")),
+    ("Saham", ("saham", "pasar saham", "harga saham")),
+    ("Investasi", ("investasi", "investor", "portofolio")),
+    ("Emiten", ("emiten", "bbca", "tlkm", "antm", "bursa efek indonesia")),
+    ("Makroekonomi", ("inflasi", "suku bunga", "rupiah", "nilai tukar", "ekonomi global", "geopolitik")),
+    ("Laporan Keuangan", ("laporan keuangan", "kinerja keuangan", "laba", "pendapatan", "kuartal")),
+    ("Berita Pasar", ("berita", "sentimen", "market", "trading halt", "buyback", "msci")),
+]
 
 
 app = Flask(__name__)
@@ -81,20 +90,22 @@ def get_search_payload():
     return request.args
 
 
-def build_filter_queries(tipe):
+def build_filter_queries(tipe=None, tahun=None):
     filters = []
     if tipe in {"pdf", "web"}:
         filters.append(f"tipe:{tipe}")
+    if tahun and str(tahun).isdigit():
+        filters.append(f"tahun:{tahun}")
     return filters
 
 
-def build_search_params(query, rows, start=0, tipe=None, highlight=True):
+def build_search_params(query, rows, start=0, tipe=None, tahun=None, highlight=True):
     solr_query = query if query else "*:*"
     params = {
         "q": solr_query,
         "defType": "edismax",
         "qf": "judul^3 konten _text_",
-        "fl": "id,judul,sumber,tipe,nama_file,url,score,konten",
+        "fl": "id,judul,sumber,tipe,nama_file,url,tahun,score,konten",
         "rows": rows,
         "start": start,
         "wt": "json",
@@ -112,7 +123,7 @@ def build_search_params(query, rows, start=0, tipe=None, highlight=True):
             }
         )
 
-    filters = build_filter_queries(tipe)
+    filters = build_filter_queries(tipe, tahun)
     if filters:
         params["fq"] = filters
 
@@ -141,11 +152,22 @@ def scalarize_document(doc):
     return normalized
 
 
+def extract_topics(title, content):
+    haystack = f"{title or ''} {content or ''}".lower()
+    topics = [
+        label
+        for label, keywords in TOPIC_RULES
+        if any(keyword in haystack for keyword in keywords)
+    ]
+    return topics[:3]
+
+
 def normalize_documents(docs, highlighting):
     results = []
     for doc in docs:
         doc = scalarize_document(doc)
         content = doc.pop("konten", "")
+        doc["topik"] = extract_topics(doc.get("judul", ""), content)
         doc["snippet"] = normalize_highlight(highlighting, doc.get("id", ""), content)
         results.append(doc)
     return results
@@ -168,33 +190,49 @@ def sort_documents(documents, sort_by):
     return documents
 
 
-def build_type_facets(query):
+def build_unfiltered_docs(query):
     params = build_search_params(
         query=query,
         rows=MAX_SORT_DOCS,
         start=0,
         tipe=None,
+        tahun=None,
         highlight=False,
     )
-    params["fl"] = "id,tipe"
+    params["fl"] = "id,tipe,tahun"
 
     response = requests.get(solr_select_url(), params=params, timeout=30)
     response.raise_for_status()
-    docs = response.json().get("response", {}).get("docs", [])
+    return response.json().get("response", {}).get("docs", [])
 
-    counts = {"pdf": 0, "web": 0}
+
+def build_facets(query):
+    docs = build_unfiltered_docs(query)
+
+    type_counts = {"pdf": 0, "web": 0}
+    year_counts = {}
     for doc in docs:
-        tipe = scalarize_document(doc).get("tipe")
-        if tipe in counts:
-            counts[tipe] += 1
+        normalized = scalarize_document(doc)
+        tipe = normalized.get("tipe")
+        tahun = str(normalized.get("tahun") or "").strip()
+        if tipe in type_counts:
+            type_counts[tipe] += 1
+        if tahun:
+            year_counts[tahun] = year_counts.get(tahun, 0) + 1
 
-    return [
-        {"value": "pdf", "label": "PDF", "count": counts["pdf"]},
-        {"value": "web", "label": "Web", "count": counts["web"]},
-    ]
+    return {
+        "tipe": [
+            {"value": "pdf", "label": "PDF", "count": type_counts["pdf"]},
+            {"value": "web", "label": "Web", "count": type_counts["web"]},
+        ],
+        "tahun": [
+            {"value": year, "label": year, "count": count}
+            for year, count in sorted(year_counts.items(), reverse=True)
+        ],
+    }
 
 
-def search_solr(query, page, limit, tipe=None, sort_by="relevance"):
+def search_solr(query, page, limit, tipe=None, tahun=None, sort_by="relevance"):
     if sort_by not in VALID_SORTS:
         sort_by = "relevance"
 
@@ -207,6 +245,7 @@ def search_solr(query, page, limit, tipe=None, sort_by="relevance"):
         rows=rows,
         start=solr_start,
         tipe=tipe,
+        tahun=tahun,
         highlight=True,
     )
 
@@ -227,7 +266,7 @@ def search_solr(query, page, limit, tipe=None, sort_by="relevance"):
         "page": page,
         "limit": limit,
         "sort": sort_by,
-        "facets": {"tipe": build_type_facets(query)},
+        "facets": build_facets(query),
         "total": solr_response.get("numFound", 0),
         "results": results,
     }
@@ -299,12 +338,13 @@ def search():
     payload = get_search_payload()
     query = (payload.get("q") or payload.get("query") or "").strip()
     tipe = (payload.get("tipe") or payload.get("type") or "").strip().lower()
+    tahun = (payload.get("tahun") or payload.get("year") or "").strip()
     sort_by = (payload.get("sort") or "relevance").strip().lower()
     page = parse_positive_int(payload.get("page"), 1)
     limit = parse_positive_int(payload.get("limit"), DEFAULT_LIMIT, MAX_LIMIT)
 
     try:
-        return jsonify(search_solr(query, page, limit, tipe, sort_by))
+        return jsonify(search_solr(query, page, limit, tipe, tahun, sort_by))
     except requests.exceptions.ConnectionError:
         return jsonify(
             {

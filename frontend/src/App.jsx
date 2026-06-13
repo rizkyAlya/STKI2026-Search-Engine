@@ -60,6 +60,15 @@ const SORT_OPTIONS = [
   ["title_desc", "Judul Z-A"],
   ["type_asc", "Tipe dokumen"],
 ];
+const TOPIC_RULES = [
+  ["IHSG", ["ihsg", "indeks harga saham gabungan"]],
+  ["Saham", ["saham", "pasar saham", "harga saham"]],
+  ["Investasi", ["investasi", "investor", "portofolio"]],
+  ["Emiten", ["emiten", "bbca", "tlkm", "antm", "bursa efek indonesia"]],
+  ["Makroekonomi", ["inflasi", "suku bunga", "rupiah", "nilai tukar", "ekonomi global", "geopolitik"]],
+  ["Laporan Keuangan", ["laporan keuangan", "kinerja keuangan", "laba", "pendapatan", "kuartal"]],
+  ["Berita Pasar", ["berita", "sentimen", "market", "trading halt", "buyback", "msci"]],
+];
 
 function safeHighlight(value) {
   return String(value || "")
@@ -113,16 +122,61 @@ function getLocalSuggestions(value) {
   return [...startsWithMatches, ...containsMatches].slice(0, 8);
 }
 
+function stripHtml(value) {
+  return String(value || "").replace(/<[^>]+>/g, " ");
+}
+
+function getResultTopics(item) {
+  if (Array.isArray(item.topik) && item.topik.length > 0) {
+    return item.topik.slice(0, 3);
+  }
+
+  const haystack = `${item.judul || ""} ${stripHtml(item.snippet)}`.toLowerCase();
+  return TOPIC_RULES.filter(([, keywords]) =>
+    keywords.some((keyword) => haystack.includes(keyword)),
+  )
+    .map(([label]) => label)
+    .slice(0, 3);
+}
+
+function DocumentIcon({ type }) {
+  if (type === "pdf") {
+    return (
+      <span className="document-icon pdf-icon" title="PDF" aria-label="PDF">
+        <span />
+      </span>
+    );
+  }
+
+  return (
+    <span className="document-icon web-icon" title="Web" aria-label="Web">
+      <span />
+    </span>
+  );
+}
+
 function ResultItem({ item }) {
   const openTarget = getOpenTarget(item);
   const title = item.judul || "Tanpa judul";
+  const topics = getResultTopics(item);
 
   return (
     <article className="result-item">
       <div className="result-topline">
-        <span className={`type-badge type-${item.tipe || "unknown"}`}>
-          {item.tipe || "dokumen"}
-        </span>
+        <div className="result-meta">
+          <DocumentIcon type={item.tipe} />
+          <div className="topic-badges" aria-label="Topik dokumen">
+            {topics.length > 0 ? (
+              topics.map((topic) => (
+                <span key={topic} className="topic-badge">
+                  {topic}
+                </span>
+              ))
+            ) : (
+              <span className="topic-badge muted">Dokumen</span>
+            )}
+          </div>
+        </div>
         {typeof item.score === "number" && (
           <span className="score">Score {item.score.toFixed(2)}</span>
         )}
@@ -181,6 +235,36 @@ function TypeFacets({ value, facets, onChange }) {
         {labelWithCount("Web", webCount)}
       </button>
     </div>
+  );
+}
+
+function YearFacets({ value, facets, onChange }) {
+  if (!facets?.length) {
+    return null;
+  }
+
+  return (
+    <aside className="year-facet-panel" aria-label="Faceted search tahun">
+      <h2>Tahun</h2>
+      <button
+        type="button"
+        className={value === "" ? "active" : ""}
+        onClick={() => onChange("")}
+      >
+        <span>Semua tahun</span>
+      </button>
+      {facets.map((facet) => (
+        <button
+          type="button"
+          key={facet.value}
+          className={value === facet.value ? "active" : ""}
+          onClick={() => onChange(facet.value)}
+        >
+          <span>{facet.label}</span>
+          <strong>{facet.count}</strong>
+        </button>
+      ))}
+    </aside>
   );
 }
 
@@ -253,6 +337,7 @@ function InfoSidebar({ open, onToggle, onSearchSuggestion }) {
 function App() {
   const [query, setQuery] = useState("");
   const [tipe, setTipe] = useState("");
+  const [tahun, setTahun] = useState("");
   const [sortBy, setSortBy] = useState("relevance");
   const [page, setPage] = useState(1);
   const [data, setData] = useState(null);
@@ -263,6 +348,7 @@ function App() {
   const [error, setError] = useState("");
   const searchMode = Boolean(data || loading || error);
   const typeFacets = data?.facets?.tipe || [];
+  const yearFacets = data?.facets?.tahun || [];
 
   const totalPages = useMemo(() => {
     if (!data?.total) return 1;
@@ -300,6 +386,7 @@ function App() {
     }
 
     setLoading(true);
+    setData(null);
     setError("");
     setSuggestionsOpen(false);
 
@@ -312,6 +399,9 @@ function App() {
 
     if (tipe) {
       params.set("tipe", tipe);
+    }
+    if (tahun) {
+      params.set("tahun", tahun);
     }
 
     try {
@@ -341,6 +431,7 @@ function App() {
     setQuery(term);
     setSuggestionsOpen(false);
     setLoading(true);
+    setData(null);
     setError("");
 
     const params = new URLSearchParams({
@@ -352,6 +443,9 @@ function App() {
 
     if (tipe) {
       params.set("tipe", tipe);
+    }
+    if (tahun) {
+      params.set("tahun", tahun);
     }
 
     try {
@@ -377,6 +471,11 @@ function App() {
     setPage(1);
   }
 
+  function changeYear(nextYear) {
+    setTahun(nextYear);
+    setPage(1);
+  }
+
   useEffect(() => {
     fetchHealth();
   }, []);
@@ -385,14 +484,14 @@ function App() {
     if (data && query.trim()) {
       search(1);
     }
-  }, [tipe, sortBy]);
+  }, [tipe, tahun, sortBy]);
 
   return (
     <div className="page-shell">
       <header className="site-header">
         <div className="brand">
           <BrandMark />
-          <span>STKI<span>Search</span></span>
+          <span>Nusa<span>Stock</span></span>
         </div>
         <div className={`health ${health?.ok ? "health-ok" : "health-error"}`}>
           <span className="health-dot" />
@@ -581,48 +680,53 @@ function App() {
                 </div>
               </section>
 
-              <section className="results-panel">
-                <div className="result-summary">
-                  <span>
-                    {data ? `${data.total} hasil` : "Mencari hasil"}
-                    {data?.query ? ` untuk "${data.query}"` : ""}
-                  </span>
-                  {data && <span>Halaman {page} dari {totalPages}</span>}
-                </div>
-
-                {error && <div className="notice error-notice">{error}</div>}
-                {!error && loading && <div className="notice">Memuat hasil...</div>}
-
-                {!loading && !error && data?.results?.length === 0 && (
-                  <div className="notice">Tidak ada hasil.</div>
-                )}
-
-                <div className="result-list">
-                  {data?.results?.map((item) => (
-                    <ResultItem key={item.id} item={item} />
-                  ))}
-                </div>
-
-                {data && totalPages > 1 && (
-                  <div className="pagination">
-                    <button
-                      type="button"
-                      disabled={page <= 1 || loading}
-                      onClick={() => search(page - 1)}
-                    >
-                      Sebelumnya
-                    </button>
-                    <span>{page} / {totalPages}</span>
-                    <button
-                      type="button"
-                      disabled={page >= totalPages || loading}
-                      onClick={() => search(page + 1)}
-                    >
-                      Berikutnya
-                    </button>
+              <div className="results-layout">
+                <section className="results-panel">
+                  <div className="result-summary">
+                    <span>
+                      {data ? `${data.total} hasil` : "Mencari hasil"}
+                      {data?.query ? ` untuk "${data.query}"` : ""}
+                      {tahun ? ` pada ${tahun}` : ""}
+                    </span>
+                    {data && <span>Halaman {page} dari {totalPages}</span>}
                   </div>
-                )}
-              </section>
+
+                  {error && <div className="notice error-notice">{error}</div>}
+                  {!error && loading && <div className="notice">Memuat hasil...</div>}
+
+                  {!loading && !error && data?.results?.length === 0 && (
+                    <div className="notice">Tidak ada hasil.</div>
+                  )}
+
+                  <div className="result-list">
+                    {data?.results?.map((item) => (
+                      <ResultItem key={item.id} item={item} />
+                    ))}
+                  </div>
+
+                  {data && totalPages > 1 && (
+                    <div className="pagination">
+                      <button
+                        type="button"
+                        disabled={page <= 1 || loading}
+                        onClick={() => search(page - 1)}
+                      >
+                        Sebelumnya
+                      </button>
+                      <span>{page} / {totalPages}</span>
+                      <button
+                        type="button"
+                        disabled={page >= totalPages || loading}
+                        onClick={() => search(page + 1)}
+                      >
+                        Berikutnya
+                      </button>
+                    </div>
+                  )}
+                </section>
+
+                <YearFacets value={tahun} facets={yearFacets} onChange={changeYear} />
+              </div>
             </div>
           </section>
         )}
